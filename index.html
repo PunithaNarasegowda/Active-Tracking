@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Vehicle Proximity Alert</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+
+    #map {
+      height: 100vh;
+      width: 100vw;
+    }
+
+    #popup {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background-color: #ff4444;
+      color: white;
+      padding: 16px 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      font-weight: bold;
+      font-family: sans-serif;
+      display: none;
+      z-index: 1000;
+      animation: fadein 0.4s, fadeout 0.4s 2.6s;
+    }
+
+    @keyframes fadein {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeout {
+      from { opacity: 1; transform: translateY(0); }
+      to   { opacity: 0; transform: translateY(-10px); }
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="popup">⚠️ Vehicle nearby!</div>
+
+<script src="https://cdn.socket.io/4.7.1/socket.io.min.js"></script>
+<script src="https://unpkg.com/leaflet"></script>
+<script>
+  // 🔄 Replace with your backend's IP address and port
+  const socket = io('http://10.201.112.11:3000'); // ← Change this
+
+  const map = L.map('map').setView([20, 78], 5); // Default center on India
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+  const markers = {};
+
+  // 🚀 Send your location every 3 seconds
+  setInterval(() => {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      sendLocation(lat, lon);
+    }, err => {
+      console.error("Geolocation error:", err);
+    });
+  }, 3000);
+
+  function sendLocation(lat, lon) {
+    socket.emit('sendLocation', { lat, lon });
+  }
+
+  // 📍 Show location updates on map
+  socket.on('locationUpdate', data => {
+    const { id, lat, lon } = data;
+    if (!markers[id]) {
+      markers[id] = L.marker([lat, lon]).addTo(map).bindPopup(`Vehicle ${id}`);
+    } else {
+      markers[id].setLatLng([lat, lon]);
+    }
+  });
+
+  // ❌ Remove marker on disconnect
+  socket.on('removeMarker', id => {
+    if (markers[id]) {
+      map.removeLayer(markers[id]);
+      delete markers[id];
+    }
+  });
+
+  // 🚨 Show toast popup instead of alert
+  socket.on('proximityAlert', ({ from, distance }) => {
+    showPopup(`🚗 Vehicle ${from} is ${distance} meters away!`);
+  });
+
+  // 🧾 Popup toast logic
+  function showPopup(message) {
+    const popup = document.getElementById('popup');
+    popup.textContent = message;
+    popup.style.display = 'block';
+
+    setTimeout(() => {
+      popup.style.display = 'none';
+    }, 3000);
+  }
+
+  // ✅ Debug: Connection status
+  socket.on('connect', () => {
+    console.log("✅ Connected to server as:", socket.id);
+  });
+</script>
+
+</body>
+</html>
